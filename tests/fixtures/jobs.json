@@ -1,0 +1,19 @@
+[
+  {
+    "id": "1",
+    "title": "Software Engineering Intern - Summer 2027",
+    "company": "Example Labs",
+    "location": "Toronto, Ontario, Canada",
+    "url": "https://www.linkedin.com/jobs/view/1",
+    "description": "Build frontend products with React, TypeScript, Python and design systems. Collaborate in Figma."
+  },
+  {
+    "id": "2",
+    "title": "Senior Sales Manager",
+    "company": "Example Corp",
+    "location": "Remote",
+    "url": "https://www.linkedin.com/jobs/view/2",
+    "description": "Manage enterprise sales accounts and a large team."
+  }
+]
+

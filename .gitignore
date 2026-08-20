@@ -1,0 +1,9 @@
+output/
+state/
+logs/
+profile/resume.txt
+config.json
+*.pyc
+__pycache__/
+.DS_Store
+tmp/

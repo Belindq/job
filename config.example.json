@@ -1,0 +1,43 @@
+{
+  "timezone": "America/Toronto",
+  "locations": [
+    "Toronto, Ontario, Canada",
+    "Vancouver, British Columbia, Canada",
+    "New York, NY",
+    "San Francisco Bay Area",
+    "Remote"
+  ],
+  "searches": [
+    "summer 2027 software engineering intern",
+    "summer 2027 product design intern",
+    "summer 2027 design engineering intern",
+    "2027 software developer internship",
+    "2027 UX product design internship"
+  ],
+  "max_results_per_search": 20,
+  "max_descriptions_per_run": 80,
+  "max_job_age_days": 45,
+  "request_delay_seconds": 1.5,
+  "blocked_companies": [],
+  "goals": {
+    "target_roles": [
+      "software engineering intern",
+      "product design intern",
+      "design engineering intern"
+    ],
+    "preferred_locations": ["Toronto", "New York", "San Francisco", "Remote"],
+    "preferred_keywords": [
+      "frontend",
+      "full stack",
+      "React",
+      "TypeScript",
+      "product design",
+      "design systems",
+      "prototyping",
+      "Figma"
+    ],
+    "avoid_keywords": ["senior", "staff", "principal", "manager", "full-time only"],
+    "must_be_internship": true,
+    "target_season": "summer 2027"
+  }
+}

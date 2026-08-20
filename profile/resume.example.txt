@@ -1,0 +1,6 @@
+Replace this file with resume.txt and paste the plain text of your resume here.
+
+Include your skills, tools, education, projects, experience, and accomplishments.
+The ranker compares this text with each job description, so concrete technologies
+and role-specific phrases help it produce a better match score.
+
