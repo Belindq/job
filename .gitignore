@@ -1,8 +1,11 @@
 output/
-state/
-logs/
+state
+state.before-background-runtime/
+logs
+logs.before-background-runtime/
 profile/resume.txt
 config.json
+config/email.env
 *.pyc
 __pycache__/
 .DS_Store

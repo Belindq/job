@@ -16,9 +16,26 @@
   ],
   "max_results_per_search": 20,
   "max_descriptions_per_run": 80,
-  "max_job_age_days": 45,
   "request_delay_seconds": 1.5,
   "blocked_companies": [],
+  "excluded_seasons": ["winter 2027", "fall 2027", "autumn 2027", "spring 2027"],
+  "filters": {
+    "countries": {
+      "canada": true,
+      "united_states": true
+    },
+    "include_remote": true,
+    "include_unknown_locations": false,
+    "posted_within_days": 45,
+    "include_unknown_posted_date": true,
+    "require_internship_in_title": true,
+    "require_target_season_in_title": true,
+    "exclude_mixed_seasons": true,
+    "include_title_keywords": [],
+    "exclude_title_keywords": [],
+    "minimum_match_score": 0,
+    "max_jobs_in_report": 200
+  },
   "goals": {
     "target_roles": [
       "software engineering intern",

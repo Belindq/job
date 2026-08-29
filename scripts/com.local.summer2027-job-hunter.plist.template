@@ -6,6 +6,7 @@
   <string>com.local.summer2027-job-hunter</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/bin/zsh</string>
     <string>__PROJECT_DIR__/scripts/run_daily.sh</string>
   </array>
   <key>StartCalendarInterval</key>
@@ -21,4 +22,3 @@
   <string>__PROJECT_DIR__/logs/launchd-stderr.log</string>
 </dict>
 </plist>
-

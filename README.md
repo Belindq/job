@@ -1,17 +1,30 @@
 # Internship Job Hunter
 
-This is a small, local job-search tool for students. It searches public job listings, removes duplicates, and ranks the results against **your resume and your job-search preferences**. Company-board results are limited to internship and co-op postings; LinkedIn results are ranked but are not perfectly filtered. It creates a readable HTML report at `output/report.html`.
+This is a local job-search tool for students. It searches public LinkedIn listings and 50 direct company job boards, removes duplicates, enforces your configured filters, and ranks the results against **your resume and job-search goals**.
 
-It can be shared with a friend in mechanical engineering, but they should customize the search settings first. The included company list is mostly large technology companies, so it is a starting point rather than a complete mechanical-engineering job database.
+## Features
+
+- Searches LinkedIn public guest listings plus public Greenhouse, Ashby, Lever, Riot, and structured company career pages.
+- Checks 50 configured employers, including Figma, Notion, Roblox, Riot Games, FAANG, and other major technology companies.
+- Filters by Canada, United States, remote status, posting age, target season, internship/co-op title, title keywords, blocked employers, minimum score, and report size.
+- Excludes mixed seasons such as `Summer/Fall 2027` when strict season filtering is enabled.
+- Ranks matches using 60% resume fit and 40% career-goal fit, with a ranked top 10 at the beginning.
+- Retains and deduplicates prior results while reapplying current filters to saved history.
+- Generates `output/report.html`, `output/jobs.json`, and a polished PDF with real clickable application links.
+- Runs every morning at 8:00 a.m. through a macOS LaunchAgent and can email the PDF automatically.
+- Keeps the resume, email password, and personalized configuration out of Git.
+- Isolates fake fixture data under `output/demo/` so tests cannot contaminate live results.
+
+The company list is mostly technology-focused. Someone searching another field should customize both the search phrases and employer list.
 
 ## What you need
 
-- A Mac with Python 3 (`python3` in Terminal)
+- A Mac with Python 3 (`python3` in Terminal); PDF email generation also needs ReportLab
 - This project folder
 - A plain-text copy of your resume
 - About 10 minutes to edit the search settings
 
-No Python packages or account logins are required.
+Searching and HTML generation require no account login. Email delivery requires SMTP credentials, and LinkedIn access remains limited to public guest pages.
 
 ## First-time setup
 
@@ -31,17 +44,67 @@ Open `profile/resume.txt`, delete the example text, and paste the plain text of 
 
 The resume is only used locally to calculate match scores. It is not uploaded by this program.
 
-### 2. Choose the searches
+### 2. Configure searches, filters, and ranking
 
 Open `config.json` and edit these fields:
 
 - `locations`: cities or regions where you want to work.
 - `searches`: phrases sent to the job search. Include the job titles you actually want.
+- `filters`: hard inclusion/exclusion rules applied to new results and saved history.
 - `goals.target_roles`: titles that should receive a strong preference.
 - `goals.preferred_keywords`: skills or subjects that make a job more interesting.
 - `goals.avoid_keywords`: words that should lower a match, such as `senior` or `full-time only`.
 - `goals.target_season`: the season and year you are looking for.
 - `blocked_companies`: employers to exclude.
+- `excluded_seasons`: seasons to remove completely. Winter, Fall/Autumn, and Spring 2027 are excluded by default so mixed-season postings do not enter a Summer-only report.
+
+`locations` controls which LinkedIn searches are requested. `filters.countries` controls which jobs from **every source** are allowed into the final report. Disabled countries are also removed from the LinkedIn query list to avoid unnecessary requests.
+
+### Filter configuration
+
+```json
+"filters": {
+  "countries": {
+    "canada": true,
+    "united_states": true
+  },
+  "include_remote": true,
+  "include_unknown_locations": false,
+  "posted_within_days": 45,
+  "include_unknown_posted_date": true,
+  "require_internship_in_title": true,
+  "require_target_season_in_title": true,
+  "exclude_mixed_seasons": true,
+  "include_title_keywords": [],
+  "exclude_title_keywords": [],
+  "minimum_match_score": 0,
+  "max_jobs_in_report": 200
+}
+```
+
+| Setting | Effect |
+| --- | --- |
+| `countries.canada` | Includes recognized Canadian locations and enables Canadian LinkedIn search locations. |
+| `countries.united_states` | Includes recognized U.S. locations and enables U.S. LinkedIn search locations. |
+| `include_remote` | Includes remote/distributed jobs. Country-specific remote roles still respect the country toggles. |
+| `include_unknown_locations` | Keeps listings whose location cannot be identified as Canada, U.S., or remote. Keep this `false` for strict geography. |
+| `posted_within_days` | Keeps jobs posted within this many days and sends the same time window to LinkedIn. Use `null` to disable the age cutoff. |
+| `include_unknown_posted_date` | Keeps company-board jobs that do not publish a reliable date. Set `false` for a strict date-only report. |
+| `require_internship_in_title` | Requires `intern`, `internship`, or `co-op` in the title. |
+| `require_target_season_in_title` | Requires the season/year from `goals.target_season` in the title, including formats such as `Summer '27`. |
+| `exclude_mixed_seasons` | Applies `excluded_seasons` to titles, removing combinations such as `Summer/Fall 2027`. |
+| `include_title_keywords` | If non-empty, a title must contain at least one listed phrase. Example: `["software", "product design"]`. |
+| `exclude_title_keywords` | Removes titles containing any listed phrase. Example: `["phd", "hardware"]`. |
+| `minimum_match_score` | Removes jobs below this 0-100 overall match score after ranking. |
+| `max_jobs_in_report` | Caps the number of highest-ranked jobs in HTML, JSON, and PDF. Use `null` for no cap. |
+
+Examples:
+
+- Canada only: set `canada` to `true` and `united_states` to `false`.
+- U.S. only: set `canada` to `false` and `united_states` to `true`.
+- Posted in the last week: set `posted_within_days` to `7`.
+- Strictly dated listings: set `include_unknown_posted_date` to `false`.
+- Only software/design roles: set `include_title_keywords` to `["software", "frontend", "design engineer", "product design", "ui", "ux"]`.
 
 For example, a mechanical-engineering student might use settings like these:
 
@@ -74,6 +137,8 @@ Use ordinary text in `preferred_keywords`; add the tools and subjects that matte
 
 The scoring is a guide, not a hiring decision. Results are ranked using **60% resume fit and 40% goal fit**. A high score means the posting resembles the resume and preferences you entered.
 
+After changing `config.json`, `profile/resume.txt`, company boards, or runtime code, rerun `./scripts/install_launchd.sh`. The installer copies the current setup into the background-safe runtime used by the 8:00 a.m. schedule.
+
 ### 3. Optional: update the employer list
 
 The companies checked directly are in `company_boards.json`. They are mostly technology companies. You can edit this file to add an employer's public Greenhouse, Ashby, Lever, or structured careers-page feed, but this may require technical setup. LinkedIn public search results are still collected from the phrases in `config.json`.
@@ -105,6 +170,37 @@ python3 src/job_hunter.py --skip-linkedin       # company boards only
 python3 src/job_hunter.py --skip-company-boards # LinkedIn only
 ```
 
+## Email the report
+
+The daily script can email a PDF version of the finished report. Gmail requires an **App Password** for this; do not use your normal Gmail password.
+
+1. Turn on 2-Step Verification for the Gmail account that will send the message.
+2. Create an App Password in your Google Account security settings.
+3. Copy the example settings:
+
+	```bash
+	cp config/email.env.example config/email.env
+	open -e config/email.env
+	```
+
+4. Replace `SMTP_PASSWORD` with the 16-character App Password. Set `SMTP_USERNAME` to the sending Gmail address and `EMAIL_TO` to the address that should receive the report. The provided example sends to `unicornbelinda@gmail.com`.
+
+The secret file is ignored by Git and is not uploaded. The email script builds `output/pdf/job-report.pdf`; every job title and **Open actual job posting** label links to the real application page. It does not send your resume or `config.json`. The local HTML report keeps the richer visual formatting.
+
+After enabling email, reinstall the macOS schedule so it uses the updated launcher:
+
+```bash
+./scripts/install_launchd.sh
+```
+
+You can test email delivery without waiting until 8:00 a.m. by running:
+
+```bash
+python3 scripts/email_report.py
+```
+
+Email errors are recorded in `logs/email.log`.
+
 ## Run it automatically every day (macOS)
 
 After completing the setup above:
@@ -113,7 +209,11 @@ After completing the setup above:
 ./scripts/install_launchd.sh
 ```
 
-This schedules a search for 8:00 a.m. each day. The Mac must be awake or logged in around that time; macOS normally runs a missed job after wake/login. To remove the schedule without deleting reports:
+This schedules a search for 8:00 a.m. each day. The Mac must be awake or logged in around that time; macOS normally runs a missed job after wake/login.
+
+The installer keeps its background-safe runtime under `~/Library/Application Support/Summer2027JobHunter`. macOS blocks LaunchAgents from opening scripts inside `Documents`; the workspace report, state, PDF, and log paths are linked to the private runtime so existing bookmarks keep working.
+
+To remove the schedule without deleting reports:
 
 ```bash
 ./scripts/uninstall_launchd.sh
@@ -122,8 +222,9 @@ This schedules a search for 8:00 a.m. each day. The Mac must be awake or logged 
 ## Troubleshooting and limits
 
 - If setup says a file is missing, confirm that `config.json` and `profile/resume.txt` were created from the example files.
-- If there are no useful results, broaden `locations` and `searches`, check that `target_season` matches the listings, and remove overly specific keywords.
-- Only postings containing internship or co-op language are included by the company-board collectors.
+- If there are no useful results, broaden `locations` and `searches`, enable `include_unknown_locations` or `include_unknown_posted_date`, increase `posted_within_days`, and review title/score filters.
+- With the default strict settings, every retained posting must identify itself as an internship/co-op and explicitly name the target season in its title.
+- Posting dates are not available from every company board. `include_unknown_posted_date` controls whether those jobs survive the date filter.
 - A company-board failure appears as a warning; other sources can still complete.
 - LinkedIn can rate-limit or change its public guest pages. The tool records warnings and does not log in, bypass CAPTCHAs, or evade access controls.
 - Automated access may be restricted by LinkedIn's current terms. Review those terms before enabling the schedule.
