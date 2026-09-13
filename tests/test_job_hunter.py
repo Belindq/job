@@ -111,6 +111,36 @@ class RankingTests(unittest.TestCase):
         kept = MODULE.filter_title_keywords(jobs, ["software"], ["phd"])
         self.assertEqual([job.id for job in kept], ["se"])
 
+    def test_explicit_no_sponsorship_is_removed_but_ambiguous_and_sponsored_jobs_remain(self):
+        jobs = [
+            MODULE.Job(id="no", title="Summer 2027 Software Intern", company="A", location="NY", url="https://example.com/no", description="Candidates must be authorized to work without current or future visa sponsorship."),
+            MODULE.Job(id="yes", title="Summer 2027 Software Intern", company="B", location="NY", url="https://example.com/yes", description="Visa sponsorship is available for qualified candidates."),
+            MODULE.Job(id="unknown", title="Summer 2027 Software Intern", company="C", location="NY", url="https://example.com/unknown", description="Build products with Python."),
+        ]
+        kept = MODULE.filter_work_eligibility(jobs, {
+            "exclude_explicit_no_visa_sponsorship": True,
+            "exclude_us_citizenship_or_clearance_required": True,
+            "exclude_defense_and_military_roles": True,
+        })
+        self.assertEqual([job.id for job in kept], ["yes", "unknown"])
+
+    def test_citizenship_clearance_and_defense_roles_are_removed(self):
+        jobs = [
+            MODULE.Job(id="citizen", title="Summer 2027 Engineering Intern", company="A", location="Toronto, ON", url="https://example.com/c", description="U.S. citizenship is required."),
+            MODULE.Job(id="clearance", title="Summer 2027 Engineering Intern", company="B", location="Arlington, VA", url="https://example.com/s", description="Must be able to obtain and maintain a security clearance."),
+            MODULE.Job(id="defense-company", title="Summer 2027 Engineering Intern", company="Lockheed Martin", location="Arlington, VA", url="https://example.com/d"),
+            MODULE.Job(id="defense-role", title="Summer 2027 Engineering Intern", company="C", location="Arlington, VA", url="https://example.com/m", description="Support Department of Defense missile systems."),
+            MODULE.Job(id="canadian-clearance", title="Summer 2027 Engineering Intern", company="B", location="Toronto, ON", url="https://example.com/ca", description="Must be able to obtain and maintain a Government of Canada security clearance."),
+            MODULE.Job(id="canadian-defense", title="Summer 2027 Engineering Intern", company="General Dynamics", location="Ottawa, ON", url="https://example.com/cad", description="Work on Canadian defense programs."),
+            MODULE.Job(id="civilian", title="Summer 2027 Engineering Intern", company="D", location="NY", url="https://example.com/o", description="Build consumer products."),
+        ]
+        kept = MODULE.filter_work_eligibility(jobs, {
+            "exclude_explicit_no_visa_sponsorship": True,
+            "exclude_us_citizenship_or_clearance_required": True,
+            "exclude_defense_and_military_roles": True,
+        })
+        self.assertEqual([job.id for job in kept], ["canadian-clearance", "canadian-defense", "civilian"])
+
     def test_report_is_written(self):
         job = MODULE.Job(id="1", title="Intern", company="Co", location="Toronto", url="https://example.com", score=80)
         with tempfile.TemporaryDirectory() as folder:

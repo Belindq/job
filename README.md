@@ -6,12 +6,14 @@ This is a local job-search tool for students. It searches public LinkedIn listin
 
 - Searches LinkedIn public guest listings plus public Greenhouse, Ashby, Lever, Riot, and structured company career pages.
 - Checks 50 configured employers, including Figma, Notion, Roblox, Riot Games, FAANG, and other major technology companies.
-- Filters by Canada, United States, remote status, posting age, target season, internship/co-op title, title keywords, blocked employers, minimum score, and report size.
+- Filters by Canada, United States, remote status, posting age, target season, internship/co-op title, title keywords, visa sponsorship, citizenship/security-clearance requirements, military/defense work, blocked employers, minimum score, and report size.
 - Excludes mixed seasons such as `Summer/Fall 2027` when strict season filtering is enabled.
 - Ranks matches using 60% resume fit and 40% career-goal fit, with a ranked top 10 at the beginning.
 - Retains and deduplicates prior results while reapplying current filters to saved history.
 - Generates `output/report.html`, `output/jobs.json`, and a polished PDF with real clickable application links.
 - Runs every morning at 8:00 a.m. through a macOS LaunchAgent or Windows Task Scheduler and can email the PDF automatically.
+- Supports additional recipient profiles with separate searches, resumes, reports, credentials, and delivery histories.
+- Places all `NEW` PDF listings first, followed by `PREVIOUSLY SENT` listings, while preserving match-score order within each group.
 - Keeps the resume, email password, and personalized configuration out of Git.
 
 The company list is mostly technology-focused. Someone searching another field should customize both the search phrases and employer list.
@@ -88,6 +90,9 @@ Open `config.json` and edit these fields:
   "exclude_mixed_seasons": true,
   "include_title_keywords": [],
   "exclude_title_keywords": [],
+  "exclude_explicit_no_visa_sponsorship": true,
+  "exclude_us_citizenship_or_clearance_required": true,
+  "exclude_defense_and_military_roles": true,
   "minimum_match_score": 0,
   "max_jobs_in_report": 200
 }
@@ -106,6 +111,9 @@ Open `config.json` and edit these fields:
 | `exclude_mixed_seasons` | Applies `excluded_seasons` to titles, removing combinations such as `Summer/Fall 2027`. |
 | `include_title_keywords` | If non-empty, a title must contain at least one listed phrase. Example: `["software", "product design"]`. |
 | `exclude_title_keywords` | Removes titles containing any listed phrase. Example: `["phd", "hardware"]`. |
+| `exclude_explicit_no_visa_sponsorship` | Removes postings that explicitly say sponsorship is unavailable or that applicants must work without present/future sponsorship. Ambiguous postings and postings that offer sponsorship remain. |
+| `exclude_us_citizenship_or_clearance_required` | Removes explicit U.S.-citizenship/U.S.-person requirements everywhere and security-clearance requirements on U.S.-only jobs. Canadian clearance roles, ordinary background checks, and ambiguous postings remain. |
+| `exclude_defense_and_military_roles` | Removes explicit U.S. military/Department of Defense work everywhere, plus dedicated defense employers and military/weapon-system roles when the job is U.S.-only. Canadian defense roles remain eligible. |
 | `minimum_match_score` | Removes jobs below this 0-100 overall match score after ranking. |
 | `max_jobs_in_report` | Caps the number of highest-ranked jobs in HTML, JSON, and PDF. Use `null` for no cap. |
 
@@ -116,6 +124,7 @@ Examples:
 - Posted in the last week: set `posted_within_days` to `7`.
 - Strictly dated listings: set `include_unknown_posted_date` to `false`.
 - Only software/design roles: set `include_title_keywords` to `["software", "frontend", "design engineer", "product design", "ui", "ux"]`.
+- Allow roles with explicit citizenship/clearance restrictions: set `exclude_us_citizenship_or_clearance_required` to `false`.
 
 For example, a mechanical-engineering student might use settings like these:
 
@@ -202,6 +211,28 @@ py -3 scripts\email_report.py
 
 Email errors are recorded in `logs/email.log`.
 
+### Send separate reports to additional people
+
+Each subfolder under `profiles/` is an isolated recipient. Give it its own search configuration, resume, and email settings:
+
+```text
+profiles/
+  friend-name/
+    config.json
+    resume.txt
+    email.env
+```
+
+The daily runner creates a separately ranked report under `output/profiles/friend-name/`, then emails it using that profile's credentials. Successful deliveries are remembered under `state/profiles/friend-name/`, so the next PDF can distinguish `NEW` jobs from `PREVIOUSLY SENT` jobs. Profile folders are ignored by Git because they contain private resumes and SMTP credentials.
+
+On macOS, rerun the installer after adding or changing a profile:
+
+```bash
+./scripts/install_launchd.sh
+```
+
+On Windows, `scripts\run_daily.ps1` handles all profile folders automatically. No extra Task Scheduler entries are needed.
+
 ## Run a real search once
 
 On macOS:
@@ -211,16 +242,15 @@ On macOS:
 open output/report.html
 ```
 
-On Windows, use PowerShell. The second command sends the email only when `config\email.env` exists:
+On Windows, use PowerShell. Keep this window open until the search finishes; this runs the primary search and every additional profile:
 
 ```powershell
-New-Item -ItemType Directory -Force logs | Out-Null
-py -3 src\job_hunter.py *>> logs\job-hunter.log
-if (Test-Path config\email.env) { py -3 scripts\email_report.py *>> logs\email.log }
+Write-Host "Searching LinkedIn and company boards; multi-profile runs can take 15-45 minutes..."
+.\scripts\run_daily.ps1
 Start-Process output\report.html
 ```
 
-The first run may take a few minutes because the tool pauses between requests and fetches job descriptions. Results are saved in `output/report.html` and `output/jobs.json`; diagnostic messages are saved in `logs/job-hunter.log`.
+The first run may take 5-15 minutes because the tool pauses between requests, checks 50 company boards, and fetches job descriptions. The Python process prints its completion message only after collection finishes. The scheduled macOS and Windows commands redirect that message and any errors to `logs/job-hunter.log`, so scheduled runs are intentionally silent. Results are saved in `output/report.html` and `output/jobs.json`.
 
 To collect only one source on macOS:
 
@@ -265,12 +295,18 @@ After completing the setup above:
 5. Set **Add arguments** to the following, replacing the example project path with the full path to your checkout:
 
    ```text
-   -NoProfile -ExecutionPolicy Bypass -Command "Set-Location 'C:\path\to\jobhunter'; New-Item -ItemType Directory -Force logs | Out-Null; py -3 src\job_hunter.py *>> logs\job-hunter.log; if (Test-Path config\email.env) { py -3 scripts\email_report.py *>> logs\email.log }"
+   -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\jobhunter\scripts\run_daily.ps1"
    ```
 
 6. Finish the wizard. In the task's **Properties**, enable **Run task as soon as possible after a scheduled start is missed** if you want a sleeping computer to catch up after it wakes.
 
 The computer must be on at 8:00 a.m. or wake later with the missed-run option enabled. To test it, right-click the task and choose **Run**. To disable the automation without deleting reports, right-click the task and choose **Disable** or **Delete**.
+
+The scheduled PowerShell command uses `*>> logs\job-hunter.log`, which redirects all terminal output into the log file. This is correct for an unattended task. To watch the log from another PowerShell window, run:
+
+```powershell
+Get-Content logs\job-hunter.log -Wait
+```
 
 ## Troubleshooting and limits
 

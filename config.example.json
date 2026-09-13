@@ -33,6 +33,9 @@
     "exclude_mixed_seasons": true,
     "include_title_keywords": [],
     "exclude_title_keywords": [],
+    "exclude_explicit_no_visa_sponsorship": true,
+    "exclude_us_citizenship_or_clearance_required": true,
+    "exclude_defense_and_military_roles": true,
     "minimum_match_score": 0,
     "max_jobs_in_report": 200
   },

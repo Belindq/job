@@ -6,6 +6,7 @@ logs.before-background-runtime/
 profile/resume.txt
 config.json
 config/email.env
+profiles/
 *.pyc
 __pycache__/
 .DS_Store

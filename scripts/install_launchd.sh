@@ -18,8 +18,10 @@ mkdir -p \
   "$RUNTIME_DIR/src" \
   "$RUNTIME_DIR/scripts" \
   "$RUNTIME_DIR/profile" \
+  "$RUNTIME_DIR/profiles" \
   "$RUNTIME_DIR/config" \
   "$RUNTIME_DIR/output/pdf" \
+  "$RUNTIME_DIR/output/profiles" \
   "$RUNTIME_DIR/state" \
   "$RUNTIME_DIR/logs"
 
@@ -36,6 +38,18 @@ if [[ -f "$PROJECT_DIR/config/email.env" ]]; then
   cp "$PROJECT_DIR/config/email.env" "$RUNTIME_DIR/config/email.env"
   chmod 600 "$RUNTIME_DIR/config/email.env"
 fi
+for PROFILE_DIR in "$PROJECT_DIR"/profiles/*(N/); do
+  PROFILE_NAME="${PROFILE_DIR:t}"
+  mkdir -p "$RUNTIME_DIR/profiles/$PROFILE_NAME"
+  for PROFILE_FILE in config.json resume.txt email.env; do
+    if [[ -f "$PROFILE_DIR/$PROFILE_FILE" ]]; then
+      cp "$PROFILE_DIR/$PROFILE_FILE" "$RUNTIME_DIR/profiles/$PROFILE_NAME/$PROFILE_FILE"
+    fi
+  done
+  if [[ -f "$RUNTIME_DIR/profiles/$PROFILE_NAME/email.env" ]]; then
+    chmod 600 "$RUNTIME_DIR/profiles/$PROFILE_NAME/email.env"
+  fi
+done
 chmod 700 "$RUNTIME_DIR/scripts/run_daily.sh" "$RUNTIME_DIR/scripts/email_report.py"
 
 # Seed the private runtime once, then keep the familiar workspace paths linked
@@ -57,6 +71,10 @@ if [[ -d "$PROJECT_DIR/output/pdf" && ! -L "$PROJECT_DIR/output/pdf" ]]; then
   mv "$PROJECT_DIR/output/pdf" "$PROJECT_DIR/output/pdf.before-background-runtime"
 fi
 ln -sfn "$RUNTIME_DIR/output/pdf" "$PROJECT_DIR/output/pdf"
+if [[ -d "$PROJECT_DIR/output/profiles" && ! -L "$PROJECT_DIR/output/profiles" ]]; then
+  mv "$PROJECT_DIR/output/profiles" "$PROJECT_DIR/output/profiles.before-background-runtime"
+fi
+ln -sfn "$RUNTIME_DIR/output/profiles" "$PROJECT_DIR/output/profiles"
 if [[ -d "$PROJECT_DIR/state" && ! -L "$PROJECT_DIR/state" ]]; then
   mv "$PROJECT_DIR/state" "$PROJECT_DIR/state.before-background-runtime"
 fi

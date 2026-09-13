@@ -54,6 +54,44 @@ US_STATE_CODES = (
     "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|"
     "MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
 )
+NO_SPONSORSHIP_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\bno\s+(?:visa|immigration|employment)\s+sponsorship\b",
+    r"\b(?:do(?:es)?\s+not|will\s+not|cannot|can't|unable\s+to)\b.{0,70}\b(?:sponsor|sponsorship)\b",
+    r"\bsponsorship\s+(?:is\s+)?(?:not\s+available|not\s+offered|not\s+provided|unavailable)\b",
+    r"\bwithout\b.{0,120}\b(?:visa|immigration|employment)?\s*sponsorship\b",
+    r"\bmust\b.{0,100}\b(?:not\s+require|without)\b.{0,80}\bsponsorship\b",
+))
+SPONSORSHIP_AVAILABLE_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\b(?:visa|immigration|employment)?\s*sponsorship\s+(?:is\s+)?(?:available|offered|provided)\b",
+    r"\bwe\s+(?:can|may|do|will)\s+(?:provide\s+)?(?:visa\s+)?sponsor(?:ship)?\b",
+    r"\beligible\s+for\s+(?:visa\s+)?sponsorship\b",
+))
+US_CITIZENSHIP_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\bmust\s+be\s+(?:an?\s+)?(?:u\.?s\.?|united\s+states)\s+citizen\b",
+    r"\b(?:u\.?s\.?|united\s+states)\s+citizenship\s+(?:is\s+)?(?:required|mandatory)\b",
+    r"\brequires?\s+(?:u\.?s\.?|united\s+states)\s+citizenship\b",
+    r"\bonly\s+(?:u\.?s\.?|united\s+states)\s+citizens\b",
+    r"\b(?:must\s+be|status\s+(?:is\s+)?required)\b.{0,35}\b(?:u\.?s\.?|united\s+states)\s+person\b",
+))
+SECURITY_CLEARANCE_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\bsecurity\s+clearance\s+(?:is\s+)?(?:required|mandatory)\b",
+    r"\b(?:must|required\s+to|ability\s+to)\b.{0,55}\b(?:obtain|maintain|possess|hold|be\s+eligible\s+for)\b.{0,35}\bsecurity\s+clearance\b",
+    r"\bactive\s+(?:[a-z -]+\s+)?security\s+clearance\b",
+))
+US_DEFENSE_ROLE_PATTERN = re.compile(
+    r"\b(?:department\s+of\s+(?:defen[cs]e|the\s+navy|the\s+army|the\s+air\s+force)|"
+    r"u\.?s\.?\s+(?:army|navy|air\s+force|marine\s+corps|space\s+force))\b",
+    re.IGNORECASE,
+)
+GENERIC_DEFENSE_ROLE_PATTERN = re.compile(
+    r"\b(?:defen[cs]e\s+contractor|military\s+(?:system|program|customer|application)s?|"
+    r"weapons?\s+systems?|missile\s+systems?|munitions?|naval\s+warfare|combat\s+systems?)\b",
+    re.IGNORECASE,
+)
+DEFENSE_COMPANIES = {
+    "anduril", "bae systems", "caci", "general dynamics", "l3harris",
+    "leidos", "lockheed martin", "northrop grumman", "raytheon", "rtx", "saic",
+}
 
 
 @dataclass
@@ -169,7 +207,9 @@ def collect(config: dict) -> tuple[list[Job], list[str]]:
     filters = config.get("filters", {})
     locations = filter_location_values(config["locations"], filters)
     posted_days = filters.get("posted_within_days", config.get("max_job_age_days", 45))
-    for query in config["searches"]:
+    searches = config["searches"]
+    for query_index, query in enumerate(searches, 1):
+        print(f"LinkedIn query {query_index}/{len(searches)}: {query} ({len(locations)} locations)", flush=True)
         for location in locations:
             collected_here = 0
             for start in range(0, cap, 10):
@@ -197,7 +237,7 @@ def collect(config: dict) -> tuple[list[Job], list[str]]:
                             discovered_at=datetime.now(timezone.utc).isoformat(),
                         )
                         collected_here += 1
-                except (HTTPError, URLError, TimeoutError) as exc:
+                except (HTTPError, URLError, TimeoutError, OSError) as exc:
                     errors.append(f"{query} / {location}: {exc}")
                     break
                 time.sleep(delay)
@@ -206,15 +246,19 @@ def collect(config: dict) -> tuple[list[Job], list[str]]:
 
 def add_descriptions(jobs: list[Job], delay: float) -> list[str]:
     errors: list[str] = []
-    for job in jobs:
+    if jobs:
+        print(f"Fetching {len(jobs)} LinkedIn job descriptions...", flush=True)
+    for index, job in enumerate(jobs, 1):
         try:
             body = fetch(f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job.id}")
             parser = TextParser()
             parser.feed(body)
             job.description = re.sub(r"\s+", " ", "".join(parser.parts)).strip()
-        except (HTTPError, URLError, TimeoutError) as exc:
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
             errors.append(f"description {job.id}: {exc}")
         time.sleep(delay)
+        if index % 10 == 0 or index == len(jobs):
+            print(f"Fetched descriptions: {index}/{len(jobs)}", flush=True)
     return errors
 
 
@@ -357,6 +401,47 @@ def filter_title_keywords(jobs: list[Job], included: list[str], excluded: list[s
     ]
 
 
+def filter_work_eligibility(jobs: list[Job], filters: dict) -> list[Job]:
+    """Remove only explicit sponsorship/citizenship barriers and defense roles."""
+    kept = []
+    for job in jobs:
+        text = re.sub(r"\s+", " ", " ".join((job.title, job.company, job.description))).strip()
+        countries, _ = location_categories(job.location)
+        us_only_location = "united_states" in countries and "canada" not in countries
+        sponsorship_available = any(pattern.search(text) for pattern in SPONSORSHIP_AVAILABLE_PATTERNS)
+        if (
+            filters.get("exclude_explicit_no_visa_sponsorship", True)
+            and not sponsorship_available
+            and any(pattern.search(text) for pattern in NO_SPONSORSHIP_PATTERNS)
+        ):
+            continue
+        if (
+            filters.get("exclude_us_citizenship_or_clearance_required", True)
+            and (
+                any(pattern.search(text) for pattern in US_CITIZENSHIP_PATTERNS)
+                or (
+                    us_only_location
+                    and any(pattern.search(text) for pattern in SECURITY_CLEARANCE_PATTERNS)
+                )
+            )
+        ):
+            continue
+        company_key = re.sub(r"[^a-z0-9]+", " ", job.company.lower()).strip()
+        if filters.get("exclude_defense_and_military_roles", True) and (
+            US_DEFENSE_ROLE_PATTERN.search(text)
+            or (
+                us_only_location
+                and (
+                    company_key in DEFENSE_COMPANIES
+                    or GENERIC_DEFENSE_ROLE_PATTERN.search(text)
+                )
+            )
+        ):
+            continue
+        kept.append(job)
+    return kept
+
+
 def apply_config_filters(jobs: list[Job], config: dict, now: datetime | None = None) -> list[Job]:
     filters = config.get("filters", {})
     jobs = filter_blocked_companies(jobs, config.get("blocked_companies", []))
@@ -372,6 +457,7 @@ def apply_config_filters(jobs: list[Job], config: dict, now: datetime | None = N
         filters.get("include_title_keywords", []),
         filters.get("exclude_title_keywords", []),
     )
+    jobs = filter_work_eligibility(jobs, filters)
     jobs = filter_job_locations(jobs, filters)
     jobs = filter_posted_dates(
         jobs,
@@ -520,6 +606,7 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=ROOT / "config.json")
     parser.add_argument("--resume", type=Path, default=ROOT / "profile" / "resume.txt")
     parser.add_argument("--output", type=Path, help="Report folder (defaults to output/, or output/demo for fixtures)")
+    parser.add_argument("--state", type=Path, default=ROOT / "state" / "jobs.json", help="Saved-job history path")
     parser.add_argument("--company-boards", type=Path, default=ROOT / "company_boards.json")
     parser.add_argument("--skip-linkedin", action="store_true", help="Only collect direct company boards")
     parser.add_argument("--skip-company-boards", action="store_true", help="Only collect LinkedIn")
@@ -542,9 +629,11 @@ def main() -> int:
         jobs: list[Job] = []
         errors: list[str] = []
         if not args.skip_linkedin:
+            print("Starting LinkedIn collection...", flush=True)
             linkedin_jobs, linkedin_errors = collect(config)
             jobs.extend(linkedin_jobs)
             errors.extend(linkedin_errors)
+            print(f"LinkedIn collection complete: {len(linkedin_jobs)} listings", flush=True)
         if not args.skip_company_boards:
             if not args.company_boards.exists():
                 errors.append(f"Company board configuration not found: {args.company_boards}")
@@ -552,11 +641,13 @@ def main() -> int:
                 from company_boards import collect_company_boards
 
                 boards = json.loads(args.company_boards.read_text())
+                print(f"Checking {len(boards)} company boards...", flush=True)
                 board_items, board_errors = collect_company_boards(boards)
                 jobs.extend(Job(**item) for item in board_items)
                 errors.extend(board_errors)
+                print(f"Company-board collection complete: {len(board_items)} listings", flush=True)
         jobs = list({job.id: job for job in jobs}.values())
-        previous = load_previous(ROOT / "state" / "jobs.json")
+        previous = load_previous(args.state)
         known_ids = {job.id for job in jobs}
         for jid, old in previous.items():
             if jid not in known_ids:
@@ -567,6 +658,10 @@ def main() -> int:
             job for job in jobs if job.source == "LinkedIn" and not job.description
         ][:detail_limit]
         errors.extend(add_descriptions(missing_descriptions, float(config.get("request_delay_seconds", 1.5))))
+        # LinkedIn descriptions are fetched after the initial pass. Reapply all
+        # filters so newly discovered sponsorship/citizenship language takes
+        # effect in the same run.
+        jobs = apply_config_filters(jobs, config)
     score_jobs(jobs, resume, config["goals"])
     if not args.fixture:
         filters = config.get("filters", {})
@@ -576,7 +671,7 @@ def main() -> int:
         max_jobs = filters.get("max_jobs_in_report")
         if max_jobs is not None:
             jobs = jobs[:max(0, int(max_jobs))]
-    state_path = output_dir / "fixture-state.json" if args.fixture else None
+    state_path = output_dir / "fixture-state.json" if args.fixture else args.state
     write_reports(jobs, errors, output_dir, state_path=state_path, demo=bool(args.fixture))
     print(f"Wrote {len(jobs)} ranked jobs to {output_dir / 'report.html'}")
     return 0
